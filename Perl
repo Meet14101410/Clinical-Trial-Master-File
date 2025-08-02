@@ -1,0 +1,108 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Data::Dumper; # For pretty-printing data structures
+
+# This script simulates generating a TMF completeness report
+# by processing a simplified data source (e.g., a CSV or a mock database dump).
+
+# In a real system, this data would come from a database query.
+# For demonstration, we'll use a string representing CSV-like data.
+my $tmf_data_csv = q(
+"DOC_ID","TRIAL_ID","SITE_ID","TMF_ZONE","TMF_ARTIFACT","STATUS","UPLOAD_DATE","VERSION"
+"TMF-001","CT-101","","1.Management","Protocol","Approved","2024-01-15","1.0"
+"TMF-002","CT-101","SITE-001","5.Investigator Site","Investigator CV","Filed","2024-01-20","1.0"
+"TMF-003","CT-101","SITE-001","4.IRB/IEC","ICF","Filed","2024-02-01","1.0"
+"TMF-004","CT-101","SITE-002","5.Investigator Site","Investigator CV","Draft","2024-01-22","1.0"
+"TMF-005","CT-101","","3.Regulatory","IND Application","Submitted","2024-03-01","1.0"
+"TMF-006","CT-102","","1.Management","Protocol","Approved","2024-01-10","1.0"
+"TMF-007","CT-101","SITE-001","5.Investigator Site","Delegation Log","Pending Review","2024-07-25","1.0"
+"TMF-008","CT-101","","1.Management","Monitoring Plan","Approved","2024-02-10","1.0"
+);
+
+my @lines = split /\n/, $tmf_data_csv;
+my @header = split /","/, (shift @lines =~ s/^"|"$//gr); # Remove quotes, split by ","
+
+my @documents;
+foreach my $line (@lines) {
+    next unless $line =~ /\S/; # Skip empty lines
+    my %doc;
+    @doc{@header} = split /","/, ($line =~ s/^"|"$//gr);
+    push @documents, \%doc;
+}
+
+# --- Reporting Logic ---
+print "--- TMF Completeness Report ---\n\n";
+
+my %status_counts;
+my %trial_doc_counts;
+my %missing_required_docs; # Conceptual: list docs expected but not found/filed
+
+# Define some "required" documents for a trial (simplified list)
+my @required_artifacts = (
+    "Protocol",
+    "Investigator CV",
+    "ICF",
+    "IND Application",
+    "Monitoring Plan",
+    "Delegation Log"
+);
+
+# Initialize missing docs for each trial
+my %trials_in_data;
+foreach my $doc_ref (@documents) {
+    $trials_in_data{$doc_ref->{"TRIAL_ID"}} = 1;
+}
+
+foreach my $trial (keys %trials_in_data) {
+    $missing_required_docs{$trial} = { map { $_ => 1 } @required_artifacts }; # All are initially missing
+}
+
+
+foreach my $doc_ref (@documents) {
+    my $status = $doc_ref->{"STATUS"};
+    my $trial_id = $doc_ref->{"TRIAL_ID"};
+    my $artifact = $doc_ref->{"TMF_ARTIFACT"};
+
+    # Count by status
+    $status_counts{$status}++;
+
+    # Count by trial
+    $trial_doc_counts{$trial_id}++;
+
+    # Check for required documents (only if status indicates it's "filed" or "approved")
+    if (grep { $status eq $_ } ("Filed", "Approved", "Submitted")) {
+        delete $missing_required_docs{$trial_id}->{$artifact};
+    }
+}
+
+# 1. Document Status Summary
+print "1. Document Status Summary:\n";
+foreach my $status (sort keys %status_counts) {
+    print "  $status: $status_counts{$status} documents\n";
+}
+print "\n";
+
+# 2. Documents per Trial
+print "2. Documents per Trial:\n";
+foreach my $trial (sort keys %trial_doc_counts) {
+    print "  $trial: $trial_doc_counts{$trial} documents\n";
+}
+print "\n";
+
+# 3. Conceptual TMF Completeness (Missing Required Artifacts)
+print "3. Missing Required Artifacts by Trial (Conceptual):\n";
+foreach my $trial (sort keys %missing_required_docs) {
+    my @missing_for_trial = sort keys %{$missing_required_docs{$trial}};
+    if (@missing_for_trial) {
+        print "  $trial: " . join(", ", @missing_for_trial) . "\n";
+    } else {
+        print "  $trial: All required artifacts found (conceptual).\n";
+    }
+}
+print "\n";
+
+print "--- Report End ---\n";
+
+# For debugging: print Dumper(\@documents);

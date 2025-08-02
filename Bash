@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# This script simulates archiving older TMF documents.
+# In a real eTMF, this would be based on status, retention policies,
+# and metadata from the database, not just file age or extension.
+
+# Configuration
+SOURCE_DIR="/var/eTMF_storage/documents" # Directory where active TMF documents are
+ARCHIVE_ROOT_DIR="/var/eTMF_archive"   # Root directory for archives
+RETENTION_PERIOD_DAYS=365              # Documents older than this many days to be considered for archive (conceptual)
+LOG_FILE="/var/log/eTMF_archive.log"    # Log file for archiving operations
+
+# --- Functions ---
+
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+create_archive_dir() {
+    local trial_id=$1
+    local site_id=$2 # Optional
+    local archive_path=""
+
+    if [ -n "$site_id" ]; then
+        # Archive path for site-specific documents
+        archive_path="${ARCHIVE_ROOT_DIR}/${trial_id}/sites/${site_id}/$(date +%Y)/$(date +%m)"
+    else
+        # Archive path for central documents
+        archive_path="${ARCHIVE_ROOT_DIR}/${trial_id}/central/$(date +%Y)/$(date +%m)"
+    fi
+
+    mkdir -p "$archive_path"
+    if [ $? -eq 0 ]; then
+        echo "$archive_path"
+    else
+        log_message "ERROR: Failed to create archive directory: $archive_path"
+        return 1
+    fi
+}
+
+archive_document() {
+    local source_file=$1
+    local trial_id=$2
+    local site_id=$3 # Can be empty
+
+    local archive_target_dir=$(create_archive_dir "$trial_id" "$site_id")
+    if [ $? -ne 0 ]; then
+        log_message "Skipping archiving of $source_file due to directory creation failure."
+        return 1
+    fi
+
+    local filename=$(basename "$source_file")
+    local dest_file="${archive_target_dir}/${filename}"
+
+    log_message "Archiving: Moving '$source_file' to '$dest_file'"
+    mv "$source_file" "$dest_file"
+
+    if [ $? -eq 0 ]; then
+        log_message "SUCCESS: '$filename' archived."
+        # Optionally, compress the file after moving
+        # gzip "$dest_file"
+        # log_message "Compressed: '$dest_file'"
+    else
+        log_message "FAILURE: Failed to move '$source_file'."
+    fi
+}
+
+# --- Main Script Logic ---
+
+log_message "--- Starting eTMF Archiving Process ---"
+
+# This is a highly simplified example. In reality, you'd get a list
+# of files to archive from your eTMF database, based on their status
+# (e.g., "Archived"), retention policy, and last modification date.
+
+# For demonstration, let's simulate a few files.
+# We'll assume a structure like:
+# /var/eTMF_storage/documents/<trial_id>/<site_id>/<document_name.pdf>
+# /var/eTMF_storage/documents/<trial_id>/central/<document_name.pdf>
+
+# Create dummy directories and files for testing
+mkdir -p "${SOURCE_DIR}/TRIAL-ABC/sites/SITE-001"
+mkdir -p "${SOURCE_DIR}/TRIAL-ABC/central"
+echo "Old Protocol Version A" > "${SOURCE_DIR}/TRIAL-ABC/central/protocol_v1.0.pdf"
+echo "Signed ICF from 2 years ago" > "${SOURCE_DIR}/TRIAL-ABC/sites/SITE-001/patient_icf_p001.pdf"
+echo "Recent Monitoring Report" > "${SOURCE_DIR}/TRIAL-ABC/central/monitoring_report_2025-07.pdf"
+
+# Simulate marking some files as "old" for demonstration (based on name for simplicity)
+log_message "Simulating archiving for demonstration purposes..."
+
+# Example 1: Archive a central document
+if [ -f "${SOURCE_DIR}/TRIAL-ABC/central/protocol_v1.0.pdf" ]; then
+    archive_document "${SOURCE_DIR}/TRIAL-ABC/central/protocol_v1.0.pdf" "TRIAL-ABC" "" # No site_id for central
+fi
+
+# Example 2: Archive a site-specific document
+if [ -f "${SOURCE_DIR}/TRIAL-ABC/sites/SITE-001/patient_icf_p001.pdf" ]; then
+    archive_document "${SOURCE_DIR}/TRIAL-ABC/sites/SITE-001/patient_icf_p001.pdf" "TRIAL-ABC" "SITE-001"
+fi
+
+# Example 3: A file that should NOT be archived (e.g., recent)
+if [ -f "${SOURCE_DIR}/TRIAL-ABC/central/monitoring_report_2025-07.pdf" ]; then
+    log_message "Skipping 'monitoring_report_2025-07.pdf' as it's new (simulated)."
+fi
+
+# In a real system, you would query your eTMF database for documents
+# whose `status` is 'Archived' and `filePath` corresponds to `SOURCE_DIR`,
+# then loop through those results and call `archive_document`.
+
+log_message "--- eTMF Archiving Process Finished ---"
+echo "Check $LOG_FILE for details."
+echo "Also check directories: $SOURCE_DIR and $ARCHIVE_ROOT_DIR"

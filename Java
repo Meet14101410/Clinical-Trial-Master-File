@@ -1,0 +1,332 @@
+// TMFDocument.java - Represents a single document in the eTMF
+import java.time.LocalDateTime;
+import java.util.Objects;
+import java.util.UUID;
+
+public class TMFDocument {
+    private String documentId;
+    private String trialId;
+    private String siteId; // Can be null for central docs
+    private String documentTitle;
+    private TMFZone tmfZone;
+    private TMFSection tmfSection;
+    private TMFArtifact tmfArtifact;
+    private String filePath; // Path to storage (e.g., S3 URL, file system path)
+    private String currentVersion;
+    private String status; // e.g., "Draft", "Approved", "Filed", "Archived"
+    private String uploadedBy;
+    private LocalDateTime uploadDate;
+    private LocalDateTime lastModifiedDate;
+    private String sha256Hash; // For data integrity (21 CFR Part 11)
+
+    public TMFDocument(String trialId, String siteId, String documentTitle,
+                       TMFZone tmfZone, TMFSection tmfSection, TMFArtifact tmfArtifact,
+                       String filePath, String uploadedBy) {
+        this.documentId = UUID.randomUUID().toString();
+        this.trialId = trialId;
+        this.siteId = siteId;
+        this.documentTitle = documentTitle;
+        this.tmfZone = tmfZone;
+        this.tmfSection = tmfSection;
+        this.tmfArtifact = tmfArtifact;
+        this.filePath = filePath;
+        this.currentVersion = "1.0"; // Initial version
+        this.status = "Draft"; // Default status
+        this.uploadedBy = uploadedBy;
+        this.uploadDate = LocalDateTime.now();
+        this.lastModifiedDate = LocalDateTime.now();
+        this.sha256Hash = ""; // Placeholder, would be calculated upon upload
+    }
+
+    // --- Getters ---
+    public String getDocumentId() { return documentId; }
+    public String getTrialId() { return trialId; }
+    public String getSiteId() { return siteId; }
+    public String getDocumentTitle() { return documentTitle; }
+    public TMFZone getTmfZone() { return tmfZone; }
+    public TMFSection getTmfSection() { return tmfSection; }
+    public TMFArtifact getTmfArtifact() { return tmfArtifact; }
+    public String getFilePath() { return filePath; }
+    public String getCurrentVersion() { return currentVersion; }
+    public String getStatus() { return status; }
+    public String getUploadedBy() { return uploadedBy; }
+    public LocalDateTime getUploadDate() { return uploadDate; }
+    public LocalDateTime getLastModifiedDate() { return lastModifiedDate; }
+    public String getSha256Hash() { return sha256Hash; }
+
+    // --- Setters (for lifecycle management) ---
+    public void setCurrentVersion(String currentVersion) {
+        this.currentVersion = currentVersion;
+        this.lastModifiedDate = LocalDateTime.now();
+    }
+    public void setStatus(String status) {
+        this.status = status;
+        this.lastModifiedDate = LocalDateTime.now();
+    }
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+        this.lastModifiedDate = LocalDateTime.now();
+    }
+    public void setSha256Hash(String sha256Hash) {
+        this.sha256Hash = sha256Hash;
+        // lastModifiedDate usually doesn't change just for hash calculation unless content changes
+    }
+    public void setLastModifiedDate(LocalDateTime lastModifiedDate) {
+        this.lastModifiedDate = lastModifiedDate;
+    }
+
+    @Override
+    public String toString() {
+        return "TMFDocument{" +
+               "documentId='" + documentId + '\'' +
+               ", trialId='" + trialId + '\'' +
+               ", title='" + documentTitle + '\'' +
+               ", TMF='" + tmfZone.getCode() + "." + tmfSection.getCode() + "." + tmfArtifact.getCode() + '\'' +
+               ", version='" + currentVersion + '\'' +
+               ", status='" + status + '\'' +
+               ", uploadedBy='" + uploadedBy + '\'' +
+               ", uploadDate=" + uploadDate.toLocalDate() +
+               '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TMFDocument that = (TMFDocument) o;
+        return Objects.equals(documentId, that.documentId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(documentId);
+    }
+}
+
+// TMF Reference Model Enums (Simplified for demonstration)
+enum TMFZone {
+    MANAGEMENT("01", "Management"),
+    CENTRAL_TRIAL_DOCS("02", "Central Trial Documents"),
+    REGULATORY("03", "Regulatory"),
+    IRB_IEC("04", "IRB/IEC"),
+    INVESTIGATOR_SITE("05", "Investigator Site Documents");
+
+    private final String code;
+    private final String description;
+
+    TMFZone(String code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+    public String getCode() { return code; }
+    public String getDescription() { return description; }
+}
+
+enum TMFSection {
+    PROTOCOL("01", "Protocol and Amendments", TMFZone.MANAGEMENT),
+    IB("02", "Investigator's Brochure", TMFZone.REGULATORY),
+    ICF("03", "Informed Consent Form", TMFZone.IRB_IEC),
+    CV("04", "Curriculum Vitae", TMFZone.INVESTIGATOR_SITE);
+
+    private final String code;
+    private final String description;
+    private final TMFZone parentZone;
+
+    TMFSection(String code, String description, TMFZone parentZone) {
+        this.code = code;
+        this.description = description;
+        this.parentZone = parentZone;
+    }
+    public String getCode() { return code; }
+    public String getDescription() { return description; }
+    public TMFZone getParentZone() { return parentZone; }
+}
+
+enum TMFArtifact {
+    PROTOCOL_V1("01.01", "Protocol V1", TMFSection.PROTOCOL),
+    PROTOCOL_AMENDMENT("01.02", "Protocol Amendment", TMFSection.PROTOCOL),
+    IB_V2("02.01", "IB V2", TMFSection.IB),
+    ICF_SITE("03.01", "Site ICF", TMFSection.ICF),
+    CV_INVESTIGATOR("04.01", "Investigator CV", TMFSection.CV);
+
+    private final String code;
+    private final String description;
+    private final TMFSection parentSection;
+
+    TMFArtifact(String code, String description, TMFSection parentSection) {
+        this.code = code;
+        this.description = description;
+        this.parentSection = parentSection;
+    }
+    public String getCode() { return code; }
+    public String getDescription() { return description; }
+    public TMFSection getParentSection() { return parentSection; }
+}
+
+// ETMFManager.java - Manages documents in the eTMF (in-memory for demo)
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import javax.xml.bind.DatatypeConverter; // For byte to hex conversion
+
+public class ETMFManager {
+    // In a real system, this would be backed by a database
+    private Map<String, TMFDocument> documents; // documentId -> latest document object
+    private List<TMFDocument> allDocumentVersions; // To keep track of all versions for audit
+
+    public ETMFManager() {
+        this.documents = new HashMap<>();
+        this.allDocumentVersions = new ArrayList<>();
+    }
+
+    public void addDocument(TMFDocument doc) {
+        if (documents.containsKey(doc.getDocumentId())) {
+            System.out.println("Error: Document with ID " + doc.getDocumentId() + " already exists. Use updateDocument.");
+            return;
+        }
+        documents.put(doc.getDocumentId(), doc);
+        allDocumentVersions.add(doc); // Add initial version to audit list
+        System.out.println("Document added to eTMF: " + doc.getDocumentTitle() + " (v" + doc.getCurrentVersion() + ")");
+    }
+
+    // Simulate updating a document (e.g., new version uploaded, status change)
+    public void updateDocument(String documentId, String newVersion, String newStatus, String newFilePath) {
+        Optional<TMFDocument> existingDocOpt = getDocumentById(documentId);
+        existingDocOpt.ifPresent(doc -> {
+            // Create a *new* TMFDocument object for the new version/state for proper audit trail
+            TMFDocument newVersionDoc = new TMFDocument(
+                doc.getTrialId(), doc.getSiteId(), doc.getDocumentTitle(),
+                doc.getTmfZone(), doc.getTmfSection(), doc.getTmfArtifact(),
+                newFilePath, doc.getUploadedBy() // Uploader might change in real system
+            );
+            newVersionDoc.setDocumentId(doc.getDocumentId()); // Keep same ID for document, different object for version
+            newVersionDoc.setCurrentVersion(newVersion);
+            newVersionDoc.setStatus(newStatus);
+            newVersionDoc.setLastModifiedDate(LocalDateTime.now());
+            // In real system, re-calculate hash for newFilePath
+
+            documents.put(documentId, newVersionDoc); // Update latest version
+            allDocumentVersions.add(newVersionDoc); // Add new version to audit list
+            System.out.println("Document " + doc.getDocumentTitle() + " updated. New Version: " + newVersion + ", Status: " + newStatus);
+        });
+    }
+
+    public Optional<TMFDocument> getDocumentById(String documentId) {
+        return Optional.ofNullable(documents.get(documentId));
+    }
+
+    public List<TMFDocument> getDocumentsByTrial(String trialId) {
+        List<TMFDocument> trialDocs = new ArrayList<>();
+        for (TMFDocument doc : documents.values()) {
+            if (doc.getTrialId().equals(trialId)) {
+                trialDocs.add(doc);
+            }
+        }
+        return trialDocs;
+    }
+
+    public List<TMFDocument> getDocumentsByTMFClassification(TMFZone zone, TMFSection section, TMFArtifact artifact) {
+        List<TMFDocument> classifiedDocs = new ArrayList<>();
+        for (TMFDocument doc : documents.values()) {
+            if (doc.getTmfZone() == zone && doc.getTmfSection() == section && doc.getTmfArtifact() == artifact) {
+                classifiedDocs.add(doc);
+            }
+        }
+        return classifiedDocs;
+    }
+
+    public List<TMFDocument> getAllDocuments() {
+        return new ArrayList<>(documents.values());
+    }
+
+    public List<TMFDocument> getAllDocumentVersions() {
+        return new ArrayList<>(allDocumentVersions); // For audit trail purposes
+    }
+
+    // Conceptual method to calculate SHA256 hash of a file
+    public String calculateFileSha256(String filePath) throws NoSuchAlgorithmException, IOException {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream fis = new FileInputStream(filePath)) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                digest.update(buffer, 0, bytesRead);
+            }
+        }
+        byte[] hashedBytes = digest.digest();
+        return DatatypeConverter.printHexBinary(hashedBytes).toLowerCase();
+    }
+}
+
+// MainETMFProcess.java (Demonstration)
+public class MainETMFProcess {
+    public static void main(String[] args) {
+        ETMFManager eTMF = new ETMFManager();
+
+        // 1. Add initial documents
+        TMFDocument protocol = new TMFDocument(
+            "CT-101", null, "Phase 3 Oncology Protocol",
+            TMFZone.MANAGEMENT, TMFSection.PROTOCOL, TMFArtifact.PROTOCOL_V1,
+            "/data/tmf/CT-101/protocol_v1.0.pdf", "john.doe"
+        );
+        eTMF.addDocument(protocol);
+
+        TMFDocument icfSite1 = new TMFDocument(
+            "CT-101", "SITE-001", "Site 001 Informed Consent Form",
+            TMFZone.IRB_IEC, TMFSection.ICF, TMFArtifact.ICF_SITE,
+            "/data/tmf/CT-101/site001/icf_v1.0.pdf", "jane.smith"
+        );
+        eTMF.addDocument(icfSite1);
+
+        TMFDocument invCv = new TMFDocument(
+            "CT-101", "SITE-001", "Investigator CV - Dr. Green",
+            TMFZone.INVESTIGATOR_SITE, TMFSection.CV, TMFArtifact.CV_INVESTIGATOR,
+            "/data/tmf/CT-101/site001/dr_green_cv.pdf", "site_admin"
+        );
+        eTMF.addDocument(invCv);
+
+        System.out.println("\n--- All Current Documents ---");
+        eTMF.getAllDocuments().forEach(System.out::println);
+
+        // 2. Simulate a document update (e.g., protocol amendment)
+        eTMF.updateDocument(
+            protocol.getDocumentId(),
+            "2.0",
+            "Approved",
+            "/data/tmf/CT-101/protocol_v2.0_amend1.pdf"
+        );
+
+        // 3. Retrieve and display updated document
+        System.out.println("\n--- Updated Protocol ---");
+        eTMF.getDocumentById(protocol.getDocumentId()).ifPresent(System.out::println);
+
+        // 4. Show all document versions (for audit purposes)
+        System.out.println("\n--- All Document Versions (Audit Trail Concept) ---");
+        eTMF.getAllDocumentVersions().forEach(System.out::println);
+
+        // 5. Demonstrate classification retrieval
+        System.out.println("\n--- Documents by TMF Classification (ICF for Site 001) ---");
+        eTMF.getDocumentsByTMFClassification(TMFZone.IRB_IEC, TMFSection.ICF, TMFArtifact.ICF_SITE)
+            .forEach(System.out::println);
+
+        // 6. Demonstrate (conceptual) file hashing
+        // For this to work, you'd need actual files at these paths.
+        try {
+            // Create a dummy file for hashing demonstration
+            // (Requires Java 7+ for Files.write)
+            java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("dummy_protocol", ".pdf");
+            java.nio.file.Files.write(tempFile, "This is the content of the dummy protocol version 1.".getBytes());
+            System.out.println("\nSHA256 Hash of dummy file: " + eTMF.calculateFileSha256(tempFile.toString()));
+            java.nio.file.Files.delete(tempFile); // Clean up
+        } catch (Exception e) {
+            System.err.println("Error demonstrating file hashing: " + e.getMessage());
+        }
+    }
+}

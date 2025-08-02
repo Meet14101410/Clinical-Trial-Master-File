@@ -1,0 +1,169 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <map>
+#include <chrono> // For timestamps
+#include <sstream> // For stringstream
+#include <iomanip> // For std::hex, std::setw, std::setfill
+
+// For cryptographic hashing (SHA256).
+// **IMPORTANT:** For production, use a proper cryptographic library (e.g., OpenSSL, Crypto++).
+// This is a minimal, non-secure mock for demonstration purposes only.
+#include <random> // For mock hash generation
+std::string mock_sha256_hash(const std::string& data) {
+    // This is NOT a real SHA256 hash. It's a simple mock to return a fixed-length string.
+    // In reality, this would involve complex bitwise operations on the input data.
+    std::mt19937_64 rng(std::hash<std::string>{}(data)); // Seed RNG with data hash
+    std::stringstream ss;
+    ss << std::hex << std::setw(64) << std::setfill('0') << rng(); // Generate a random 64-char hex string
+    return ss.str();
+}
+
+
+// Represents key metadata for a TMF document
+struct TMFDocumentMeta {
+    std::string documentId;
+    std::string trialId;
+    std::string tmfZoneArtifactCode; // e.g., "01.01.01"
+    std::string fileName;
+    std::string currentVersion;
+    std::string contentHash; // SHA256 or similar for content integrity
+    std::chrono::system_clock::time_point uploadTimestamp;
+
+    // Constructor
+    TMFDocumentMeta(const std::string& trial_id, const std::string& tmf_code,
+                    const std::string& file_name, const std::string& version,
+                    const std::string& content_data)
+        : trialId(trial_id),
+          tmfZoneArtifactCode(tmf_code),
+          fileName(file_name),
+          currentVersion(version),
+          uploadTimestamp(std::chrono::system_clock::now())
+    {
+        // Generate a unique ID (UUID or similar in real system)
+        documentId = "TMFDOC_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+        contentHash = mock_sha256_hash(content_data); // Hash the content
+    }
+
+    void print() const {
+        std::time_t tt = std::chrono::system_clock::to_time_t(uploadTimestamp);
+        std::tm tm = *std::localtime(&tt);
+        std::cout << "  ID: " << documentId
+                  << ", Trial: " << trialId
+                  << ", TMF Code: " << tmfZoneArtifactCode
+                  << ", File: " << fileName
+                  << ", Version: " << currentVersion
+                  << ", Uploaded: " << std::put_time(&tm, "%Y-%m-%d %H:%M:%S")
+                  << "\n  Content Hash: " << contentHash << "\n";
+    }
+};
+
+// Manages TMF document metadata and integrity checks
+class TMFIntegrityManager {
+public:
+    // In a real system, this would store metadata in a database and file content in secure storage.
+    // Here, we use a map for conceptual storage.
+    std::map<std::string, TMFDocumentMeta> documents; // Map: documentId -> TMFDocumentMeta
+
+    TMFIntegrityManager() {
+        std::cout << "TMFIntegrityManager initialized.\n";
+    }
+
+    // Add a new document to the system, calculating its initial hash
+    void addDocument(const std::string& trialId, const std::string& tmfCode,
+                     const std::string& fileName, const std::string& version,
+                     const std::string& documentContent) {
+        TMFDocumentMeta newDoc(trialId, tmfCode, fileName, version, documentContent);
+        documents[newDoc.documentId] = newDoc;
+        std::cout << "Added document: " << newDoc.fileName << " (ID: " << newDoc.documentId << ")\n";
+    }
+
+    // Simulate updating a document (creates a new version and new hash)
+    void updateDocument(const std::string& docId, const std::string& newVersion,
+                        const std::string& newDocumentContent) {
+        if (documents.count(docId)) {
+            TMFDocumentMeta oldDoc = documents.at(docId); // Get a copy of the old state
+            std::cout << "Updating document ID: " << docId << " (from v" << oldDoc.currentVersion << " to v" << newVersion << ")\n";
+
+            // Create a new meta object for the new version
+            TMFDocumentMeta updatedDoc(oldDoc.trialId, oldDoc.tmfZoneArtifactCode,
+                                       oldDoc.fileName, newVersion, newDocumentContent);
+            updatedDoc.documentId = oldDoc.documentId; // Keep the same primary document ID
+            updatedDoc.uploadTimestamp = std::chrono::system_clock::now(); // Update timestamp
+
+            documents[docId] = updatedDoc; // Overwrite with new version
+            std::cout << "Document updated. New Hash: " << updatedDoc.contentHash << "\n";
+            // In a real system, the old version would be archived in an audit log/version history table.
+        } else {
+            std::cerr << "Error: Document ID " << docId << " not found for update.\n";
+        }
+    }
+
+    // Verify document integrity by re-hashing its content and comparing with stored hash
+    bool verifyDocumentIntegrity(const std::string& docId, const std::string& currentContent) const {
+        if (documents.count(docId)) {
+            const TMFDocumentMeta& storedDoc = documents.at(docId);
+            std::string recomputedHash = mock_sha256_hash(currentContent);
+
+            std::cout << "Verifying integrity for " << storedDoc.fileName << " (ID: " << docId << ")...\n";
+            std::cout << "  Stored Hash: " << storedDoc.contentHash << "\n";
+            std::cout << "  Recomputed Hash: " << recomputedHash << "\n";
+
+            if (storedDoc.contentHash == recomputedHash) {
+                std::cout << "  Integrity: MATCH (Document is un-tampered)\n";
+                return true;
+            } else {
+                std::cout << "  Integrity: MISMATCH (Document content may have been altered!)\n";
+                return false;
+            }
+        } else {
+            std::cerr << "Error: Document ID " << docId << " not found for integrity verification.\n";
+            return false;
+        }
+    }
+
+    void listAllDocuments() const {
+        std::cout << "\n--- All Documents in TMF System ---\n";
+        if (documents.empty()) {
+            std::cout << "No documents in system.\n";
+            return;
+        }
+        for (const auto& pair : documents) {
+            pair.second.print();
+        }
+    }
+};
+
+int main() {
+    TMFIntegrityManager manager;
+
+    // Simulate adding documents with their content
+    std::string protocolContentV1 = "This is the initial version of the clinical trial protocol. It contains study design.";
+    manager.addDocument("CT-101", "01.01.01", "Protocol_v1.0.pdf", "1.0", protocolContentV1);
+
+    std::string icfContentV1 = "Informed Consent Form V1.0. Participant rights and study procedures.";
+    manager.addDocument("CT-101", "04.03.01", "ICF_Site001_v1.0.pdf", "1.0", icfContentV1);
+
+    manager.listAllDocuments();
+
+    // Simulate a protocol amendment and update
+    std::string protocolContentV2 = "This is the amended version of the protocol. It includes changes to primary endpoint.";
+    std::string protocolDocId = manager.documents.begin()->first; // Get ID of the first added protocol
+
+    if (!manager.documents.empty()) {
+        std::cout << "\n--- Updating Protocol ---\n";
+        manager.updateDocument(protocolDocId, "2.0", protocolContentV2);
+    }
+    manager.listAllDocuments();
+
+
+    // Verify integrity of the latest protocol version
+    std::cout << "\n--- Verifying Document Integrity ---\n";
+    manager.verifyDocumentIntegrity(protocolDocId, protocolContentV2); // Should match
+
+    // Simulate tampering with the content
+    std::string tamperedContent = "This is the amended version of the protocol. It includes changes to primary endpoint. (TAMPERED)";
+    manager.verifyDocumentIntegrity(protocolDocId, tamperedContent); // Should mismatch!
+
+    return 0;
+}
